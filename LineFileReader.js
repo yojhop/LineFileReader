@@ -21,34 +21,71 @@ class LineFileReader{
       if(e===null){
         let size = stat.size
         let middle = Math.floor(size/2)
-        
+        let works=[this.findByte(10,middle-1,100,size),this.findByte(10,middle,100,size)]
+        Promise.all(works).then(([startIndex,endIndex])=>{
+          startIndex=startIndex===null?0:startIndex+1
+          endIndex = endIndex===null?size-1:endIndex-1
+          let len = endIndex-startIndex+1
+          this.randomFile.read(startIndex,len,(e,data)=>{
+            if(e){
+              reject(e)
+            } else{
+              
+            }
+          })
+        })
       }
     })
   }
   findByte(byte,startPlace,step,fileSize){
     return new Promise((resolve,reject)=>{
-      
+      let offset = startPlace
+      let length = step
+      if(offset >=fileSize||step<0){
+        resolve(null)
+        return
+      }
+      if(step<0){
+        offset= startPlace+step
+        length = -step
+      }
+      let adjust = 0
+      if(offset<0){
+        adjust = offset
+        offset = 0
+      }
+      if(offset+length>=fileSize){
+        length = fileSize-offset
+      }
+      this.randomFile.read(offset,length,(e,data)=>{
+        if(e) resolve(null)
+        else{
+          if(step>0){
+            let index = data.findIndex(b=>b===byte)
+            if(index>=0) resolve(offset+index)
+            else{
+              offset = offset+step
+              this.findByte(byte,offset,step,fileSize).then(index=>{
+                resolve(index)
+              })
+            }
+          } else {
+            let dataLen = data.length
+            while(dataLen--){
+              if(data[dataLen]===byte){
+                resolve(offset+dataLen)
+                return
+              }
+            }
+            this.findByte(byte,offset,step,fileSize).then(index=>{
+              resolve(index)
+            })
+          }
+        }
+      })
     })
-    let offset = startPlace
-    let length = step
-    if(step<0){
-      offset= startPlace+step
-      length = -step
-    }
-    let adjust = 0
-    if(offset<0){
-      adjust = offset
-      offset = 0
-    }
-    if(offset+length>=fileSize){
-      length = fileSize-offset
-    }
-    if(offset >=fileSize){
-      return null
-    }
-    this.randomFile.read(offset,length,(e,data)=>{
-      if(e) 
-    })
+    
   }
 }
 let l=new LineFileReader('./test.txt')
+l.findLine()
