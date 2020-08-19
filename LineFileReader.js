@@ -12,53 +12,66 @@ class LineFileReader{
   constructor(filePath){
     this.randomFile = new RandomAccessFile(filePath)
     this.randomFile.stat((e,stat)=>{
-      console.log(e,stat)
+      // console.log(e,stat)
     })
     console.log('stated')
   }
-  findLine(fn){
-    this.randomFile.stat((e,stat)=>{
-      if(e===null){
-        let size = stat.size
-        let middle = Math.floor(size/2)
-        let works=[this.findByte(10,middle-1,100,size),this.findByte(10,middle,100,size)]
-        Promise.all(works).then(([startIndex,endIndex])=>{
-          startIndex=startIndex===null?0:startIndex+1
-          endIndex = endIndex===null?size-1:endIndex-1
-          let len = endIndex-startIndex+1
-          this.randomFile.read(startIndex,len,(e,data)=>{
-            if(e){
-              reject(e)
-            } else{
-              
-            }
-          })
+  findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1){
+    return new Promise((resolve,reject)=>{
+      start = start===-1?0:start
+        this.randomFile.stat((e,stat)=>{
+          if(e===null){
+            let size = stat.size
+            end = end===-1?size-1:end
+            let middle = Math.floor(start+(end-start)/2)
+            let works=[this.findByte(10,middle-1,-100,size),this.findByte(10,middle,100,size)]
+            Promise.all(works).then(([startIndex,endIndex])=>{
+              startIndex=startIndex===null?0:startIndex+1
+              endIndex = endIndex===null?size-1:endIndex-1
+              if(startIndex===lastStart&&endIndex===lastEnd){
+                reject(new Error('Cannot find match line'))
+                return
+              }
+              let len = endIndex-startIndex+1
+              this.randomFile.read(startIndex,len,(e,data)=>{
+                if(e){
+                  reject(e)
+                } else{
+                  let ret = fn(data)
+                  if(ret===0) resolve(data)
+                  else if(ret<0){
+                    this.findLine(fn,middle,end,startIndex,endIndex,).then(d=>resolve(d)).catch(e=>reject(e))
+                  } else this.findLine(fn,start,middle,startIndex,endIndex,).then(d=>resolve(d)).catch(e=>reject(e))
+                }
+              })
+            }).catch(e=>reject(e))
+          } else reject(e)
         })
-      }
     })
   }
   findByte(byte,startPlace,step,fileSize){
     return new Promise((resolve,reject)=>{
       let offset = startPlace
       let length = step
-      if(offset >=fileSize||step<0){
+      if(offset >=fileSize||offset<0){
         resolve(null)
         return
       }
       if(step<0){
-        offset= startPlace+step
+        offset= startPlace+step+1
         length = -step
       }
-      let adjust = 0
       if(offset<0){
-        adjust = offset
         offset = 0
       }
       if(offset+length>=fileSize){
         length = fileSize-offset
       }
+      if(step<0&&offset+length>=startPlace+1){
+        length = startPlace-offset+1
+      }
       this.randomFile.read(offset,length,(e,data)=>{
-        if(e) resolve(null)
+        if(e) reject(new Error('read error'))
         else{
           if(step>0){
             let index = data.findIndex(b=>b===byte)
@@ -67,7 +80,7 @@ class LineFileReader{
               offset = offset+step
               this.findByte(byte,offset,step,fileSize).then(index=>{
                 resolve(index)
-              })
+              }).catch(e=>reject(e))
             }
           } else {
             let dataLen = data.length
@@ -79,13 +92,33 @@ class LineFileReader{
             }
             this.findByte(byte,offset,step,fileSize).then(index=>{
               resolve(index)
-            })
+            }).catch(e=>reject(e))
           }
         }
       })
     })
-    
   }
 }
-let l=new LineFileReader('./test.txt')
-l.findLine()
+function bufferToInts(buf){
+  let str=[]
+  for(let b of buf){
+    str.push(b.toString())
+  }
+  return '('+str.join(',')+')'
+}
+function test(ts){
+  let l=new LineFileReader('./test.txt')
+  l.findLine(lineBuf=>{
+    let data = lineBuf.toString('utf-8')
+    let obj=JSON.parse(data)
+    console.log(obj.ts,ts)
+    if(obj.ts===ts) return 0
+    if(obj.ts<ts) return -1
+    if(obj.ts>ts) return 1
+  }).then(res=>{
+    console.log('found line',res.toString('utf-8'))
+  }).catch(e=>{
+    console.log('caught error',e)
+  })
+}
+test(13)
