@@ -49,6 +49,57 @@ class LineFileReader{
         })
     })
   }
+  findPairLines(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1){
+    return new Promise((resolve,reject)=>{
+      start = start===-1?0:start
+        this.randomFile.stat((e,stat)=>{
+          if(e===null){
+            let size = stat.size
+            end = end===-1?size-1:end
+            let middle = Math.floor(start+(end-start)/2)
+            let works=[this.findByte(10,middle-1,-100,size),this.findByte(10,middle,100,size)]
+            Promise.all(works).then(([startIndex,endIndex])=>{
+              startIndex=startIndex===null?0:startIndex+1
+              if(endIndex===null){
+                reject(new Error('Cannot find match line'))
+                return
+              }
+              this.findByte(10,endIndex+1,100,size).then(secondEnd=>{
+                endIndex = endIndex-1
+                secondEnd = secondEnd===null?size-1:secondEnd-1
+                if(startIndex===lastStart&&endIndex===lastEnd){
+                  reject(new Error('Cannot find match line'))
+                  return
+                }
+                let len = endIndex-startIndex+1
+                this.randomFile.read(startIndex,len,(e,data)=>{
+                  if(e){
+                    reject(e)
+                  } else{
+                    let secondStart = endIndex+1
+                    let secondLen = secondEnd-secondStart+1
+                    this.randomFile.read(secondStart,secondLen,(se,secondData)=>{
+                      if(se){
+                        reject(see)
+                      }
+                      else{
+                        let ret = fn(data,secondData)
+                        if(ret===0) resolve([data,secondData])
+                        else if(ret<0){
+                          this.findPairLines(fn,middle,end,startIndex,endIndex).then(d=>resolve(d)).catch(e=>reject(e))
+                        } else this.findPairLines(fn,start,middle,startIndex,endIndex).then(d=>resolve(d)).catch(e=>reject(e))
+                      }
+                    })
+                  }
+                })
+              }).catch(e=>{
+                reject(e)
+              })
+            }).catch(e=>reject(e))
+          } else reject(e)
+        })
+    })
+  }
   findByte(byte,startPlace,step,fileSize){
     return new Promise((resolve,reject)=>{
       let offset = startPlace
@@ -111,7 +162,6 @@ function test(ts){
   l.findLine(lineBuf=>{
     let data = lineBuf.toString('utf-8')
     let obj=JSON.parse(data)
-    console.log(obj.ts,ts)
     if(obj.ts===ts) return 0
     if(obj.ts<ts) return -1
     if(obj.ts>ts) return 1
@@ -121,4 +171,22 @@ function test(ts){
     console.log('caught error',e)
   })
 }
-test(13)
+function testFindPair(ts){
+  let l=new LineFileReader('./test.txt')
+  l.findPairLines((lineBuf1,lineBuf2)=>{
+    let data1 = lineBuf1.toString('utf-8')
+    let data2 = lineBuf2.toString('utf-8')
+    let obj1=JSON.parse(data1)
+    let obj2=JSON.parse(data2)
+    if(obj1.ts<=ts&&obj2.ts>=ts) return 0
+    if(obj2.ts<ts) return -1
+    if(obj1.ts>ts) return 1
+  }).then(res=>{
+    res.forEach(r=>{
+      console.log(r)
+    })
+  }).catch(e=>{
+    console.log('caught error',e)
+  })
+}
+testFindPair(16)
