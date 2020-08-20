@@ -77,7 +77,7 @@ class LineFileReader{
                     if(e) reject(e)
                     else resolve({data,start:startIndex,end:endIndex})
                   })
-                } else resolve({data:Buffer.from('','utf-8'),start:0,end:0})
+                } else resolve({data:Buffer.from('','utf-8'),start:-1,end:-1})
               })
             }
           })
