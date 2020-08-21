@@ -25,6 +25,14 @@ class LineFileReader{
       })
     })
   }
+  readContent(start,len){
+    return new Promise((resolve,reject)=>{
+      this.randomFile.read(start,len,(e,data)=>{
+        if(e) reject(e)
+        else resolve(data)
+      })
+    })
+  }
   findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1){
     return new Promise((resolve,reject)=>{
       start = start===-1?0:start
@@ -78,6 +86,11 @@ class LineFileReader{
                     else resolve({data,start:startIndex,end:endIndex})
                   })
                 } else resolve({data:Buffer.from('','utf-8'),start:-1,end:-1})
+              })
+            } else {
+              this.randomFile.read(index+1,stat.size-index-1,(e,data)=>{
+                if(e) reject(e)
+                else resolve({data,start:index+1,end:stat.size-1})
               })
             }
           })

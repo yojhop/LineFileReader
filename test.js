@@ -32,4 +32,7 @@ function testInsert(series){
     })
   }
 }
-testInsert(['{"ts":12,"k":12}','{"ts":13,"k":13}','{"ts":14,"k":14}','{"ts":15,"k":15}'])
+// testInsert(['{"ts":12,"k":12}','{"ts":13,"k":13}','{"ts":14,"k":14}','{"ts":15,"k":15}'])
+// reader.getLastLine().then(res=>{
+//   console.log(res.data.toString())
+// })
