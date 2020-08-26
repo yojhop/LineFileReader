@@ -3,7 +3,6 @@ const { read } = require('fs')
 let reader = new LineFileReader('./test.txt')
 
 function testInsert(series){
-  debugger
   if(series.length>0){
     let firstLine = series[0]
     let t = JSON.parse(firstLine)
@@ -35,7 +34,20 @@ function testInsert(series){
     })
   }
 }
-testInsert(['{"ts":12,"k":12}','{"ts":13,"k":13}','{"ts":14,"k":14}','{"ts":15,"k":15}'])
+// testInsert(['{"ts":12,"k":12}','{"ts":13,"k":13}','{"ts":14,"k":14}','{"ts":15,"k":15}'])
 // reader.getLastLine().then(res=>{
 //   console.log(res.data.toString())
 // })
+// reader.getFirstLine().then(res=>{
+//   console.log(res.data.toString())
+// })
+// let buf=Buffer.concat([Buffer.from('a'),Buffer.from('\n')])
+// console.log(buf)
+
+const {CandleSource} = require('./CandleSource')
+const source = new CandleSource('huobif/btc.usd.q','1m')
+source.getCandles(1598424762421,1598428362421).then(res=>{
+  console.log('get candles',res.length)
+}).catch(e=>{
+  console.log('got error',e)
+})

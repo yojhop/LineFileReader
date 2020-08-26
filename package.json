@@ -1,3 +1,6 @@
 {
-    "main":"./test.js"
+    "main": "./test.js",
+    "dependencies": {
+        "axios": "^0.20.0"
+    }
 }
