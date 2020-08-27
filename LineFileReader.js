@@ -6,6 +6,7 @@
 
 // file.del(offset, length, callback)
 // Will truncate the file if offset + length is larger than the current file length. Is otherwise a noop.
+// todo 如果单行为 xxx\nyyyyyyyyyy, 则index/2可能一直在yyyyy行，而匹配在xxx行
 const RandomAccessFile = require('random-access-file')
 const fs=require('fs')
 class LineFileReader{
@@ -13,12 +14,10 @@ class LineFileReader{
   constructor(filePath,step=1000){
     this.filePath=filePath
     this.randomFile=null
-    this.syncEnsureFile().then(()=>{
-      this.randomFile = new RandomAccessFile(filePath)
-    })
+    this.locked=false
+    this.syncEnsureFile()
     this.step=step
     // todo 标识是否正在读写
-    this.locked=false
     this.queue=[]
   }
   ensureFile(){
@@ -26,15 +25,18 @@ class LineFileReader{
       fs.exists(this.filePath, (exists) => {
         if (!exists) {
           fs.open(this.filePath, 'w', (err, fd) => {
-            console.log(err,fd)
             if (err) reject(err);
             fs.close(fd,err=>{
+              this.randomFile = new RandomAccessFile(this.filePath)
               if(err) reject(err)
               else resolve()
               console.log('file touched')
             })
           })
-        } else resolve()
+        } else{
+          this.randomFile = new RandomAccessFile(this.filePath)
+          resolve()
+        }
       });
     })
   }
@@ -45,7 +47,8 @@ class LineFileReader{
       this.locked=true
       fn().then(res=>{
         resolve(res)
-      }).catch(e=>reject(e)).finally(()=>{
+      }).catch(e=>{reject(e);console.log('got error',e)}).finally(()=>{
+        
         this.processQueue()
       })
     }
@@ -65,6 +68,7 @@ class LineFileReader{
     })
   }
   syncWrite(buf,offset){
+    console.log('writing',buf.length,offset)
     return new Promise((resolve,reject)=>{
       this.singleThread(()=>{
         return this.writeContent(buf,offset)
@@ -180,7 +184,6 @@ class LineFileReader{
     })
   }
   getLastLine(){
-    console.log('get last line')
     return new Promise((resolve,reject)=>{
       this.randomFile.stat((e,stat)=>{
         if(e){

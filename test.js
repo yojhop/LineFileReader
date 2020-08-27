@@ -1,6 +1,6 @@
 const {LineFileReader} = require('./LineFileReader')
 const { read } = require('fs')
-let reader = new LineFileReader('./test.txt')
+let reader = new LineFileReader('./candle-huobif-btc.usd.q-1m.data')
 
 function testInsert(series){
   if(series.length>0){
@@ -35,7 +35,7 @@ function testInsert(series){
   }
 }
 // testInsert(['{"ts":12,"k":12}','{"ts":13,"k":13}','{"ts":14,"k":14}','{"ts":15,"k":15}'])
-// reader.getLastLine().then(res=>{
+// reader.syncGetLastLine().then(res=>{
 //   console.log(res.data.toString())
 // })
 // reader.getFirstLine().then(res=>{
@@ -46,7 +46,7 @@ function testInsert(series){
 
 const {CandleSource} = require('./CandleSource')
 const source = new CandleSource('huobif/btc.usd.q','1m')
-source.getCandles(1598424762421,1598428362421).then(res=>{
+source.getCandles(1598425362421,1598428362421).then(res=>{
   console.log('get candles',res.length)
 }).catch(e=>{
   console.log('got error',e)
