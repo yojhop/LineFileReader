@@ -46,7 +46,7 @@ function testInsert(series){
 
 const {CandleSource} = require('./CandleSource')
 const source = new CandleSource('huobif/btc.usd.q','1m')
-source.getCandles(1598425362421,1598428362421).then(res=>{
+source.getCandles(1598424762421,1598428362421).then(res=>{
   console.log('get candles',res.length)
 }).catch(e=>{
   console.log('got error',e)

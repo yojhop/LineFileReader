@@ -30,7 +30,6 @@ class LineFileReader{
               this.randomFile = new RandomAccessFile(this.filePath)
               if(err) reject(err)
               else resolve()
-              console.log('file touched')
             })
           })
         } else{
@@ -41,14 +40,16 @@ class LineFileReader{
     })
   }
   // 如果当前locked状态为true,则将该请求加入queue，否则设置locked为true，处理请求后处理queue
-  singleThread(fn,resolve,reject){
-    if(this.locked) this.queue.push({fn,resolve,reject})
+  singleThread(fn,resolve,reject,name){
+    if(this.locked) this.queue.push({fn,resolve,reject,name})
     else{
       this.locked=true
       fn().then(res=>{
         resolve(res)
-      }).catch(e=>{reject(e);console.log('got error',e)}).finally(()=>{
-        
+      }).catch(e=>{
+        reject(e)
+        console.log('got error',e)}
+      ).finally(()=>{
         this.processQueue()
       })
     }
@@ -57,31 +58,36 @@ class LineFileReader{
     return new Promise((resolve,reject)=>{
       this.singleThread(()=>{
         return this.ensureFile()
-      },resolve,reject)
+      },resolve,reject,'ensurefile')
     })
   }
   syncRead(start,len){
     return new Promise((resolve,reject)=>{
       this.singleThread(()=>{
         return this.readContent(start,len)
-      },resolve,reject)
+      },resolve,reject,'read')
     })
   }
   syncWrite(buf,offset){
-    console.log('writing',buf.length,offset)
     return new Promise((resolve,reject)=>{
       this.singleThread(()=>{
         return this.writeContent(buf,offset)
-      },resolve,reject)
+      },resolve,reject,'write')
     })
   }
   processQueue(){
     if(this.queue.length>0){
       let item =this.queue.shift()
+      console.log('queue',this.queue,item)
+      console.log('============================')
       item.fn().then(res=>item.resolve(res)).catch(e=>item.reject(e)).finally(()=>{
+        console.log('processed')
         this.processQueue()
       })
-    } else this.locked=false
+    } else{
+      console.log('locked',false)
+      this.locked=false
+    }
   }
   // 处理queue，递归调用，当queue为空，则将locked设置为false
   writeContent(buf,offset){
@@ -105,10 +111,12 @@ class LineFileReader{
     return new Promise((resolve,reject)=>{
       this.singleThread(()=>{
         return this.findLine(fn,start,end,lastStart,lastEnd)
-      },resolve,reject)
+      },resolve,reject,'findLine')
     })
   }
-  findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1){
+  findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1,lastValue){
+    console.log('finding',start,end)
+    if(start === 12053) debugger
     return new Promise((resolve,reject)=>{
       start = start===-1?0:start
         this.randomFile.stat((e,stat)=>{
@@ -120,22 +128,61 @@ class LineFileReader{
             Promise.all(works).then(([startIndex,endIndex])=>{
               startIndex=startIndex===null?0:startIndex+1
               endIndex = endIndex===null?size-1:endIndex-1
-              if(startIndex===lastStart&&endIndex===lastEnd){
-                reject(new Error('Cannot find match line'))
-                return
+              let checkFn=()=>{
+                let len = endIndex-startIndex+1
+                this.randomFile.read(startIndex,len,(e,data)=>{
+                  if(e){
+                    reject(e)
+                  } else{
+                    let ret = fn(data)
+                    if(ret===0) resolve({data,start:startIndex,end:endIndex})
+                    else if(ret<0){
+                      this.findLine(fn,middle,end,startIndex,endIndex,ret).then(d=>resolve(d)).catch(e=>reject(e))
+                    } else this.findLine(fn,start,middle,startIndex,endIndex,ret).then(d=>resolve(d)).catch(e=>reject(e))
+                  }
+                })
               }
-              let len = endIndex-startIndex+1
-              this.randomFile.read(startIndex,len,(e,data)=>{
-                if(e){
-                  reject(e)
-                } else{
-                  let ret = fn(data)
-                  if(ret===0) resolve({data,start:startIndex,end:endIndex})
-                  else if(ret<0){
-                    this.findLine(fn,middle,end,startIndex,endIndex,).then(d=>resolve(d)).catch(e=>reject(e))
-                  } else this.findLine(fn,start,middle,startIndex,endIndex,).then(d=>resolve(d)).catch(e=>reject(e))
+              if(startIndex===lastStart&&endIndex===lastEnd){
+                 // todo 如果上次查询结果<0,则从endIndex查找下一个\n,如果为null，则设置为size-1,否则为end-1,如果新end等于endIndex,则抛出错误，否则，对endIndex到end进行检验，
+                // 如果上次查询结果>0,则从startIndex查找上一个\n，如果为Null，则设置为0，否则为start+1,如果新start等于startIndex,则抛出错误，否则，对新start到startIndex进行验证
+                if(lastValue<0){
+                  this.findByte(10,endIndex+2,this.step,size).then(newEnd=>{
+                    newEnd=newEnd===null?size-1:newEnd-1
+                    if(newEnd===endIndex){
+                      reject(new Error('Cannot find match line'))
+                      return
+                    }
+                    else{
+                      startIndex=endIndex+2
+                      endIndex = newEnd
+                    }
+                    if(startIndex>=endIndex){
+                      reject(new Error('Cannot find match line'))
+                      return
+                    }
+                    checkFn()
+                  })
+                } else if(lastValue>0){
+                  this.findByte(10,startIndex-2,-this.step,size).then(newStart=>{
+                    newStart=newStart===null?0:newStart+1
+                    if(newStart===startIndex){
+                      reject(new Error('Cannot find match line'))
+                      return
+                    }
+                    else{
+                      endIndex = startIndex-2
+                      startIndex=newStart
+                    }
+                    if(startIndex>=endIndex){
+                      reject(new Error('Cannot find match line'))
+                      return
+                    }
+                    checkFn()
+                  }).catch(e=>{
+                    console.log(e)
+                  })
                 }
-              })
+              } else checkFn()
             }).catch(e=>reject(e))
           } else reject(e)
         })
@@ -296,7 +343,7 @@ class LineFileReader{
         length = startPlace-offset+1
       }
       this.randomFile.read(offset,length,(e,data)=>{
-        if(e) reject(new Error('read error'))
+        if(e) reject(e)
         else{
           if(step>0){
             let index = data.findIndex(b=>b===byte)
@@ -315,6 +362,7 @@ class LineFileReader{
                 return
               }
             }
+            offset = offset+step
             this.findByte(byte,offset,step,fileSize).then(index=>{
               resolve(index)
             }).catch(e=>reject(e))
