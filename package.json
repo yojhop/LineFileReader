@@ -1,6 +1,7 @@
 {
     "main": "./test.js",
     "dependencies": {
-        "axios": "^0.20.0"
+        "axios": "^0.20.0",
+        "fs": "0.0.1-security"
     }
 }

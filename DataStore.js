@@ -1,6 +1,5 @@
-const {LineFileReader} = require('./LineFileReader')
-const { read } = require('fs')
-const { resolve } = require('path')
+
+const {getReader} = require('./GlobalReader')
 class DataStore{
   constructor(duration = 5*60*1000,enCoding='utf-8'){
     this.duration = duration
@@ -15,7 +14,7 @@ class DataStore{
       let startTs = Math.floor(start/this.duration)*this.duration
       let endTs = Math.ceil(end/this.duration)*this.duration
       let promises = []
-      let reader = new LineFileReader(path)
+      let reader = getReader(path)
       while(startTs<endTs){
         promises.push(this.getBlockData(reader,defaultReq,startTs,startTs+this.duration))
         startTs+=this.duration
@@ -40,21 +39,30 @@ class DataStore{
   }
   // summary {ts:xxx,length}
   getBlockData(reader,defaultReq,start,end){
+    console.log('getting',start)
     return new Promise((resolve,reject)=>{
       reader.singleThread(()=>{
         return new Promise((resolve,reject)=>{
           reader.findLine(lineBuf=>{
             let data=lineBuf.toString(this.enCoding)
             if(data.length>0){
+              try{
               data=JSON.parse(data)
+              }
+              catch(e){
+                console.log('got error',e,data)
+              }
               if(data.ts===start) return 0
               if(data.ts>start) return 1
               if(data.ts<start) return -1
             }
             return -1
           }).then(res=>{
-            console.log('block',start,end,'resolved')
             let summary = JSON.parse(res.data.toString(this.enCoding))
+            if(summary.length===0){
+              resolve([])
+              return
+            }
             reader.readContent(res.end+2,summary.length).then(data=>{
               let content = data.toString(this.enCoding)
               let lines = content.split('\n')
@@ -67,9 +75,9 @@ class DataStore{
               console.log(e)
               reject(e)
             })
-          }).catch(e=>{
-            console.log(e)
+          }).catch(()=>{
             defaultReq(start,end).then(res=>{
+              console.log('get from req',start,end,res.data.length)
               let items=res.data
               let lines=[]
               items.forEach(item=>{
@@ -77,8 +85,9 @@ class DataStore{
                 lines.push(JSON.stringify(item))
               })
               let content=lines.join('\n')
-              this.writeBlockData(reader,start,content)
-              resolve(items)
+              this.writeBlockData(reader,start,content).finally(()=>{
+                resolve(items)
+              })
             })
           })
         })
@@ -88,12 +97,11 @@ class DataStore{
   }
 
   writeBlockData(reader,start,content){
-    return new Promise((resolve,reject)=>{
-      reader.singleThread(()=>{
         return new Promise((resolve,reject)=>{
           let buf = Buffer.from(content,this.enCoding)
           let summary = {ts:start,length:buf.length}
           buf= Buffer.concat([Buffer.from(`${JSON.stringify(summary)}\n`,this.enCoding),buf])
+          // console.log('debug',start,content.length,buf,`$${buf.toString('utf-8')}$`)
           if(content.length>0) buf.write('\n',buf.length,this.enCoding)
           reader.findPairLines((lineBuf1,lineBuf2)=>{
             let line1 = lineBuf1.toString(this.enCoding)
@@ -105,6 +113,7 @@ class DataStore{
             return 1
           }).then(res=>{
             let secondStart = res.secondStart
+            console.log('write',secondStart)
             reader.writeContent(buf,secondStart).then(()=>{
               resolve()
             }).catch(e=>reject(e))
@@ -118,8 +127,10 @@ class DataStore{
                 let lineObj = JSON.parse(lineStr)
                 if(lineObj.ts<=start){
                   if(lineObj.hasBreak){
+                    console.log('write 1',res.end+2)
                     reader.writeContent(buf,res.end+2).then(()=>resolve()).catch(e=>reject(e))
                   } else {
+                    console.log('write 2',res.end+1)
                     buf=Buffer.concat([Buffer.from('\n',this.enCoding),buf])
                     reader.writeContent(buf,res.end+1).then(()=>resolve()).catch(e=>reject(e))
                   }
@@ -129,10 +140,16 @@ class DataStore{
               reader.getFirstLine().then(res=>{
                 let lineStr=res.data.toString(this.enCoding)
                 if(lineStr.length>0){
-                  buf=Buffer.concat([buf,Buffer.from('\n',this.enCoding)])
-                  reader.writeContent(buf,0).then(()=>resolve()).catch(e=>reject(e))
+                  console.log(buf.toString(this.enCoding))
+                  if(content.length>0) buf=Buffer.concat([buf,Buffer.from('\n',this.enCoding)])
+                  console.log('write 3',0)
+                  reader.writeContent(buf,0).then(()=>{
+                    resolve()
+                    debugger
+                  }).catch(e=>reject(e))
                 }
                 else {
+                  console.log('write 4',res.start)
                   reader.writeContent(buf,res.start).then(()=>resolve()).catch(e=>reject(e))
                 }
               }).catch(e=>{
@@ -141,8 +158,6 @@ class DataStore{
             })
           })
         })
-      },resolve,reject,'findLine')
-    })
     
   }
 }

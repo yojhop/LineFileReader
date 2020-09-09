@@ -45,9 +45,65 @@ function testInsert(series){
 // console.log(buf)
 
 const {CandleSource} = require('./CandleSource')
+const fs = require('fs')
 const source = new CandleSource('huobif/btc.usd.q','1m')
-source.getCandles(1598424762421,1598428362421).then(res=>{
-  console.log('get candles',res.length)
-}).catch(e=>{
-  console.log('got error',e)
+let start = 1598424762421
+let end = start+30*3600*1000
+// asyncProcessTime(start,end)
+// source.getCandles(start,start+3600*1000).then(()=>{
+//   source.getCandles(1577836800000,1577836800000+3600*1000)
+// })
+// source.getCandles(1598493600000,1598493600000+3600*1000).then(res=>{
+//   console.log('got candles',res)
+// })
+start=1599523200000
+reader.syncFindLine(lineBuf=>{
+  let data=lineBuf.toString(this.enCoding)
+  if(data.length>0){
+    try{
+    data=JSON.parse(data)
+    console.log('checking',data.ts)
+    }
+    catch(e){
+      // debugger
+      console.log('got error')
+      // console.log('got error',e,data)
+    }
+    if(data.ts===start) return 0
+    if(data.ts>start) return 1
+    if(data.ts<start) return -1
+  }
+  return -1
+}).then(res=>{
+  console.log('found res')
 })
+// source.getCandles(1598504400000,1598504400000+3600*1000).then(res=>{
+//   console.log('got candles',res)
+// })
+// function processTime(start,end){
+//   source.getCandles(start,start+3600*1000).then(res=>{
+//     start+=3600*1000
+//     if(start<end){
+//       processTime(start,end)
+//     }
+//   }).catch(e=>{
+//     console.log('got error',e)
+//   })
+// }
+// function asyncProcessTime(start,end){
+//   while(start<end){
+//     source.getCandles(start,start+3600*1000)
+//     start+=3600*1000
+//   }
+// }
+// const RandomAccessFile = require('random-access-file')
+// var fd = fs.openSync('./test.txt', 'a+');
+// let buf = Buffer.from('k')
+// fs.writeSync(fd, buf, 0, buf.length, 0);
+// fs.open('./test.txt','a',(e,fd)=>{
+//   console.log(e)
+//   fs.writeSync(fd,)
+//   fs.write(fd,Buffer.from('c'),0,1,0,()=>{
+//     fs.write(fd,Buffer.from('d'),0,1,0,()=>{})
+//   })
+// })

@@ -13,7 +13,7 @@ class CandleSource{
       return new Promise((resolve,reject)=>{
         s = Math.floor(s/1000)
         e= Math.ceil(e/1000)
-        let url = `https://1token.trade/api/v1/quote/candles?source=web&contract=${this.contract}&since=${s}&until=${e}&duration=${this.duration}&force=true`
+        let url = `https://1token.trade/api/v1/quote/candles?source=t0&contract=${this.contract}&since=${s}&until=${e}&duration=${this.duration}&force=true&size=1500000000`
         axios.get(url).then(res=>{
           console.log('getting from req')
           res.data.forEach(item=>item.ts = item.timestamp*1000)

@@ -7,7 +7,7 @@
 // file.del(offset, length, callback)
 // Will truncate the file if offset + length is larger than the current file length. Is otherwise a noop.
 // todo 如果单行为 xxx\nyyyyyyyyyy, 则index/2可能一直在yyyyy行，而匹配在xxx行
-const RandomAccessFile = require('random-access-file')
+const {RandomFileAdapter} = require('./RandomFileAdapter')
 const fs=require('fs')
 class LineFileReader{
   // 输入文件路径，生成行文件阅读器
@@ -27,13 +27,13 @@ class LineFileReader{
           fs.open(this.filePath, 'w', (err, fd) => {
             if (err) reject(err);
             fs.close(fd,err=>{
-              this.randomFile = new RandomAccessFile(this.filePath)
+              this.randomFile = new RandomFileAdapter(this.filePath)
               if(err) reject(err)
               else resolve()
             })
           })
         } else{
-          this.randomFile = new RandomAccessFile(this.filePath)
+          this.randomFile = new RandomFileAdapter(this.filePath)
           resolve()
         }
       });
@@ -41,15 +41,16 @@ class LineFileReader{
   }
   // 如果当前locked状态为true,则将该请求加入queue，否则设置locked为true，处理请求后处理queue
   singleThread(fn,resolve,reject,name){
-    if(this.locked) this.queue.push({fn,resolve,reject,name})
+    if(this.locked){
+      this.queue.push({fn,resolve,reject,name})
+    }
     else{
       this.locked=true
       fn().then(res=>{
         resolve(res)
+        this.processQueue()
       }).catch(e=>{
         reject(e)
-        console.log('got error',e)}
-      ).finally(()=>{
         this.processQueue()
       })
     }
@@ -78,21 +79,21 @@ class LineFileReader{
   processQueue(){
     if(this.queue.length>0){
       let item =this.queue.shift()
-      console.log('queue',this.queue,item)
-      console.log('============================')
-      item.fn().then(res=>item.resolve(res)).catch(e=>item.reject(e)).finally(()=>{
-        console.log('processed')
+      item.fn().then(res=>{
+        item.resolve(res)
+        this.processQueue()
+      }).catch(e=>{
+        item.reject(e)
         this.processQueue()
       })
     } else{
-      console.log('locked',false)
       this.locked=false
     }
   }
   // 处理queue，递归调用，当queue为空，则将locked设置为false
   writeContent(buf,offset){
     return new Promise((resolve,reject)=>{
-      this.randomFile.write(offset, buf,(e)=>{
+      this.randomFile.append(offset, buf,(e)=>{
         if(e) reject(e)
         else resolve()
       })
@@ -114,9 +115,7 @@ class LineFileReader{
       },resolve,reject,'findLine')
     })
   }
-  findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1,lastValue){
-    console.log('finding',start,end)
-    if(start === 12053) debugger
+  findLine(fn,start=-1,end=-1,lastStart = -1,lastEnd=-1,lastValue,walked=[]){
     return new Promise((resolve,reject)=>{
       start = start===-1?0:start
         this.randomFile.stat((e,stat)=>{
@@ -130,15 +129,24 @@ class LineFileReader{
               endIndex = endIndex===null?size-1:endIndex-1
               let checkFn=()=>{
                 let len = endIndex-startIndex+1
+                if(walked.includes(startIndex)){
+                  reject(e)
+                  debugger
+                  return
+                }
+                else{
+                  walked.push(startIndex)
+                }
                 this.randomFile.read(startIndex,len,(e,data)=>{
                   if(e){
                     reject(e)
                   } else{
                     let ret = fn(data)
+                    debugger
                     if(ret===0) resolve({data,start:startIndex,end:endIndex})
                     else if(ret<0){
-                      this.findLine(fn,middle,end,startIndex,endIndex,ret).then(d=>resolve(d)).catch(e=>reject(e))
-                    } else this.findLine(fn,start,middle,startIndex,endIndex,ret).then(d=>resolve(d)).catch(e=>reject(e))
+                      this.findLine(fn,middle,end,startIndex,endIndex,ret,walked).then(d=>resolve(d)).catch(e=>reject(e))
+                    } else this.findLine(fn,start,middle,startIndex,endIndex,ret,walked).then(d=>resolve(d)).catch(e=>reject(e))
                   }
                 })
               }
